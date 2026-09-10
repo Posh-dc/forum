@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	tpl = template.Must(template.ParseGlob("./frontEnd/*html"))
+	tpl = template.Must(template.ParseGlob("./static/*html"))
 )
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {

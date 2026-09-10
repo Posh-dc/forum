@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"main/backEnd"
+
 	"net/http"
 	"os"
 
@@ -31,8 +32,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// serving front end starts here
-	frontEnd := http.FileServer(http.Dir("frontEnd"))
-	mux.Handle("/frontEnd/", http.StripPrefix("/frontEnd/", frontEnd))
+	fs := http.FileServer(http.Dir("frontend"))
+	mux.Handle("/frontend/", http.StripPrefix("/frontend/", fs))
 	// serving front end starts here
 
 	// home page router
