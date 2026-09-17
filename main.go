@@ -5,29 +5,57 @@ import (
 	"fmt"
 	"log"
 	"main/backEnd"
+	"time"
 
 	"net/http"
 	"os"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-func databaseConnect() {
+func databaseConnect(ctx context.Context) (*pgxpool.Pool, error) {
 
-	conn, err := pgx.Connect(context.Background(), os.Getenv("SUPABASE_DATABASE_URL"))
-	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v", err)
+	config, configErr := pgxpool.ParseConfig(os.Getenv("SUPABASE_DATABASE_URL"))
+
+	if configErr != nil {
+		return nil, fmt.Errorf("conFigErr: \v", configErr)
 	}
-	defer conn.Close(context.Background())
-	fmt.Println("Connected")
+
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
+
+	pool, conDbErr := pgxpool.NewWithConfig(ctx, config)
+
+	if conDbErr != nil {
+		return nil, fmt.Errorf("conDbErr: \v", conDbErr)
+	}
+	err := pool.Ping(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Successfully Connected to Database")
+
+	return pool, nil
 }
 
 func main() {
-
+	ctx, cancle := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancle()
 	godotenv.Load()
 
-	databaseConnect()
+	pool, dbError := databaseConnect(ctx)
+
+	defer pool.Close()
+
+	if dbError != nil {
+		log.Fatal(dbError)
+	}
+
+	dbConnect := &backEnd.DBstruct{
+		DB: pool,
+	}
 
 	mux := http.NewServeMux()
 
@@ -38,6 +66,8 @@ func main() {
 
 	// home page router
 	mux.HandleFunc("/", backEnd.HomeHandler)
+	mux.HandleFunc("/onboarding", backEnd.OnboardingHandler)
+	mux.HandleFunc("/register", dbConnect.CreateAccountHandler)
 
 	server := &http.Server{
 		Addr:    os.Getenv("PORT"),
