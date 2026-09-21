@@ -66,7 +66,10 @@ func main() {
 
 	// home page router
 	mux.HandleFunc("/", backEnd.HomeHandler)
+
+	// registration and loging routers
 	mux.HandleFunc("/onboarding", backEnd.OnboardingHandler)
+	mux.HandleFunc("/userName", dbConnect.UsernameAvailabilityHandler)
 	mux.HandleFunc("/register", dbConnect.CreateAccountHandler)
 
 	server := &http.Server{

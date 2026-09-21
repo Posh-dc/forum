@@ -1,5 +1,12 @@
 body {
 
-    background-color: black;
-    color: beige;
+    /* background-color: black;
+    color: beige; */
+
+    background-image: url(vecteezy_vector-abstract-background-with-soft-gradient-color-and_6690940.jpg);
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    margin: 0;
 }

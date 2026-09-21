@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -14,20 +13,18 @@ import (
 
 // CHECKING IF EMAIL, USERNAME AND  PHONE NUMBER ALREADY EXIST
 
-func CheckAlreadyExist(column string, value any, pool *pgxpool.Pool, ctx context.Context) bool {
+func CheckAlreadyExist(column string, value any, pool *pgxpool.Pool, ctx context.Context) (bool, error) {
 
-	query := fmt.Sprintf("SELECT %v from users where %v = $1", column, value)
+	query := fmt.Sprintf("SELECT EXISTS (SELECT * from users where %v = $1)", column)
 
-	row, err := pool.Exec(ctx, query, value)
+	var exist bool
+	err := pool.QueryRow(ctx, query, value).Scan(&exist)
 
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
 
-	if row.RowsAffected() > 0 {
-		return true
-	}
-	return false
+	return exist, nil
 }
 
 // FUNCION TO INSER USER REGISTRATION DETAILS STARTS HERE
@@ -81,21 +78,21 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 }
 
-func CheckUniqueConstraint(insertingError error) (error, int) {
+func CheckUniqueConstraint(insertingError error) (error, int, string) {
 	var pgErr *pgconn.PgError
 
 	if errors.As(insertingError, &pgErr) {
 		if pgErr.ConstraintName == "users_phone_number_key" {
-			return fmt.Errorf("Phone Number Already Exist"), http.StatusConflict
+			return fmt.Errorf("Phone Number Already Exist"), http.StatusConflict, "phoneNumber"
 		} else if pgErr.ConstraintName == "users_email_key" {
-			return fmt.Errorf("Email Already Exist"), http.StatusConflict
+			return fmt.Errorf("Email Already Exist"), http.StatusConflict, "email"
 		} else if pgErr.ConstraintName == "users_username_key" {
-			return fmt.Errorf("Username Already Exist"), http.StatusConflict
+			return fmt.Errorf("Username Already Exist"), http.StatusConflict, "userName"
 		} else {
-			return insertingError, http.StatusInternalServerError
+			return insertingError, http.StatusInternalServerError, ""
 		}
 
 	} else {
-		return insertingError, http.StatusInternalServerError
+		return insertingError, http.StatusInternalServerError, ""
 	}
 }

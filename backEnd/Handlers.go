@@ -3,6 +3,7 @@ package backEnd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"text/template"
 	"time"
@@ -23,6 +24,14 @@ type UserRegInfo struct {
 	PhoneNumber     string `json:"phoneNumber"`
 }
 
+var (
+	displayName = "displayName"
+	userName    = "userName"
+	email       = "email"
+	password    = "password"
+	phoneNumber = "phoneNumber"
+)
+
 type DBstruct struct {
 	DB *pgxpool.Pool
 }
@@ -37,6 +46,37 @@ func OnboardingHandler(w http.ResponseWriter, r *http.Request) {
 	tpl.ExecuteTemplate(w, "onboarding.html", nil)
 }
 
+// CHECKING USERNAME AVAILABILITY HANDLER STARTS HERE
+func (db *DBstruct) UsernameAvailabilityHandler(w http.ResponseWriter, r *http.Request) {
+
+	data, _ := io.ReadAll(r.Body)
+
+	ctx := r.Context()
+
+	username, err := ValidateUsername(string(data))
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userNameExist, err := CheckAlreadyExist("username", username, db.DB, ctx)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if userNameExist {
+		http.Error(w, "Username Already Exist", http.StatusConflict)
+		return
+	}
+
+	w.WriteHeader(200)
+	fmt.Fprint(w, "Valid Username")
+
+}
+
 // USER ACCOUNT REGISTRATION HANDLER STARTS FROM HERE
 func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -48,7 +88,8 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if decodingErr != nil {
 		fmt.Println(decodingErr)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+
+		RegistrationResponse(w, http.StatusBadRequest, "Invalid request body", "")
 		return
 	}
 
@@ -63,7 +104,8 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(),displayName)
 		return
 	}
 
@@ -72,7 +114,8 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(), userName)
 		return
 	}
 
@@ -81,7 +124,7 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(), email)
 		return
 	}
 
@@ -90,7 +133,7 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(), password)
 		return
 	}
 
@@ -99,7 +142,7 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(), phoneNumber)
 		return
 	}
 
@@ -109,15 +152,18 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 	user.Password, err = HashPassword(user.Password)
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, "something went wrong - password can't be hashed", http.StatusInternalServerError)
+
+		// http.Error(w, "something went wrong - password can't be hashed", http.StatusInternalServerError)
+		RegistrationResponse(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
 
 	sessionId, err := GenerateSessionId()
 	if err != nil {
 		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, "something went wrong - sessionId can't be generated")
+
+		// fmt.Fprint(w, "something went wrong - sessionId can't be generated")
+		RegistrationResponse(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
 
@@ -125,15 +171,19 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 	insertingError := InsertUser(user, sessionId, db.DB, ctx)
 
 	if insertingError != nil {
-		errMessage, code := CheckUniqueConstraint(insertingError)
+		errMessage, code, ele := CheckUniqueConstraint(insertingError)
 
 		if code == http.StatusConflict {
-			http.Error(w, errMessage.Error(), code)
+
+			// http.Error(w, errMessage.Error(), code)
+			RegistrationResponse(w, code, errMessage.Error(), ele)
 			return
 		}
 
 		fmt.Println(errMessage)
-		http.Error(w, "Database error", code)
+
+		// http.Error(w, "Database error", code)
+		RegistrationResponse(w, code, errMessage.Error(), "")
 		return
 	}
 
@@ -150,8 +200,7 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	http.SetCookie(w, cookie)
-	w.WriteHeader(200)
-	// tpl.ExecuteTemplate(w, "index.html", nil)
-	fmt.Fprint(w, "account created")
+
+	RegistrationResponse(w, http.StatusOK, "Account Created", "")
 
 }

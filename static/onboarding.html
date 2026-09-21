@@ -5,43 +5,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
-    <link rel="stylesheet" href="/frontend/style.css">
+    <link rel="stylesheet" href="/frontend/onboarding.css">
 </head>
 
 <body>
-    <style>
-        .loginAcct {
-            display: none;
-        }
-    </style>
-    <div class="loginAcct">
-        <h1> Login Account</h1>
-        <div class="form">
-            <form class="login">
 
-                <input type="email" placeholder="Email Address">
-                <input type="password" placeholder="Password">
-                <button type="submit">Login</button>
-            </form>
+
+    <div class="main">
+
+        <div class="switch">
+            <!-- Switch between Register and login Slider div starts here  -->
+            <div class="slider"></div>
+            <button class="option active" type="button">Register</button>
+            <button class="option" type="button">Login</button>
+            <!-- Switch between Register and login Slider div ends here  -->
         </div>
 
-    </div>
-    <div class="registerAcct">
-        <h1> Create a Forum Account</h1>
-        <div class="form">
+        <p id="errorMessage"></p>
+        <div class="registerDiv">
+            <!-- Registration form  div starts here -->
             <form class="register">
-                <input type="text" placeholder="Display Name" name="displayName"> <br>
-                <input type="text" placeholder="Username" name="userName"><br>
-                <input type="email" placeholder="Email Address" name="emailAddress"><br>
-                <input type="password" placeholder="Password" name="password"><br>
-                <input type="password" placeholder="Confirm Password" name="confirmPassword"> <br>
-                <input type="number" placeholder="enter phone number" name="phoneNumber">
+                <div>
+                    <label for=""><sup>*</sup>Display name</label>
+                    <input type="text" id="displayName" placeholder="Enter your Display Name" name="displayName">
+                </div>
+                <div>
+                    <label for=""><sup>*</sup>User name</label>
+                    <input type="text" id="userName" placeholder="Enter your Username" name="userName">
+                </div>
+                <div>
+                    <label for=""><sup>*</sup>Email</label>
+                    <input type="email" id="email" placeholder="Enter your Email Address" name="emailAddress">
+                </div>
+                <div>
+                    <label for=""><sup>*</sup>Password</label>
+                    <input type="password" id="password"  placeholder="Enter your Password" name="password">
+                </div>
+                <div>
+                    <label for=""><sup>*</sup>Phone number</label>
+                    <input type="number"  id="phoneNumber" placeholder="Enter your phone number" name="phoneNumber">
+                </div>
                 <button type="submit">Create Account</button>
             </form>
+            <!-- Registration form  div ends here -->
         </div>
 
-        <script src="/frontend/onboarding.js"></script>
+        <div class="loginDiv">
+            <!-- login form  div starts here -->
+            <form class="login">
+                <div>
+                    <label for=""><sup>*</sup>Email</label>
+                    <input type="email" placeholder="Enter your Email Address">
+                </div>
+                <div>
+                    <label for=""><sup>*</sup>Password</label>
+                    <input type="password" placeholder="Enter your Password">
+                </div>
+
+                <button type="submit">Login</button>
+                <a href="">Forget Password ?</a>
+            </form>
+            <!-- login form  div starts here -->
+        </div>
+
     </div>
+
+    <script src="/frontend/onboarding.js"></script>
 </body>
 
 </html>
