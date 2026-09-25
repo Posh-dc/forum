@@ -97,7 +97,6 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	var err error
 
-	fmt.Println(user.DisplayName, user.UserName, user.Email, user.Password, user.PhoneNumber)
 
 	// Validate displayname
 	user.DisplayName, err = ValidateDisplayName(user.DisplayName)

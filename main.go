@@ -42,6 +42,8 @@ func databaseConnect(ctx context.Context) (*pgxpool.Pool, error) {
 
 func main() {
 	ctx, cancle := context.WithTimeout(context.Background(), 10*time.Second)
+
+	ctxx, cancle := context.WithTimeout(context.Background(), time.Hour)
 	defer cancle()
 	godotenv.Load()
 
@@ -56,6 +58,19 @@ func main() {
 	dbConnect := &backEnd.DBstruct{
 		DB: pool,
 	}
+
+	// backEnd.SendMail()
+
+	// emails, err := backEnd.GetPendingEmails(ctx, pool)
+
+	// if err != nil {
+	// 	fmt.Printf("Getpending email error : %w", err)
+	// 	log.Fatal()
+	// }
+
+	// fmt.Printf("%+v", emails)
+
+	backEnd.ProcessPendingEmails(ctxx, pool)
 
 	mux := http.NewServeMux()
 

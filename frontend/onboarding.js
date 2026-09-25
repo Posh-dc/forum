@@ -136,3 +136,7 @@ function clearRegistrationErrors() {
 
 
 //  sending user registration details to backend ENDS here
+
+
+
+

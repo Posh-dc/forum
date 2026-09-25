@@ -109,9 +109,9 @@ func ValidateEmail(email string) (string, error) {
 		return "", errors.New("invalid email address")
 	}
 
-	if len(email) > 25 {
-		return "", errors.New("email address is too long")
-	}
+	// if len(email) > 50{
+	// 	return "", errors.New("email address is too long")
+	// }
 
 	parts := strings.Split(email, "@")
 

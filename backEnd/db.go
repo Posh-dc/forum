@@ -38,8 +38,9 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 	defer tx.Rollback(ctx)
 
-	var id string
+	var userID string
 
+	//             insert user details
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (username,display_name,email,password,phone_number,created_at )
 	  VALUES ($1, $2, $3, $4, $5, $6) returning id;`,
@@ -49,7 +50,7 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 		user.Password,
 		user.PhoneNumber,
 		time.Now(),
-	).Scan(&id)
+	).Scan(&userID)
 
 	if err != nil {
 		return err
@@ -57,16 +58,47 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 	now := time.Now()
 
-	tag, err := tx.Exec(ctx, `INSERT INTO session(id, user_id, expires_at) VALUES($1,$2,$3);`,
+	//             insert user session-id
+	_, err = tx.Exec(ctx, `INSERT INTO session(id, user_id, expires_at) VALUES($1,$2,$3);`,
 		sessionID,
-		id,
+		userID,
 		now.Add(time.Hour))
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Rows Affected %v\n ", tag.RowsAffected())
+	// generating and saving verification code
+
+	code, err := GenerateVerificationCode()
+
+	if err != nil {
+		return fmt.Errorf("Generating Verification code Error: %w", err)
+	}
+
+	codeHashed := GeneralHashFunction(code)
+
+	_, err = tx.Exec(ctx, `INSERT INTO email_verification_codes(user_id, code_hash, expires_at) VALUES($1,$2,$3)`,
+		userID,
+		codeHashed,
+		now.Add(10*time.Minute),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	// email_outbox starts here
+
+	_, err = tx.Exec(ctx, `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
+		user.Email,
+		EmailVerificationSubject,
+		CreateVerificationEmailBody(code),
+	)
+
+	if err != nil {
+		return err
+	}
 
 	err = tx.Commit(ctx)
 
@@ -78,6 +110,8 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 }
 
+
+// FUNCTION TO CHECK UNIQUENESS
 func CheckUniqueConstraint(insertingError error) (error, int, string) {
 	var pgErr *pgconn.PgError
 
@@ -96,3 +130,5 @@ func CheckUniqueConstraint(insertingError error) (error, int, string) {
 		return insertingError, http.StatusInternalServerError, ""
 	}
 }
+
+
