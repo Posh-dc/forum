@@ -36,16 +36,6 @@ type DBstruct struct {
 	DB *pgxpool.Pool
 }
 
-func HomeHandler(w http.ResponseWriter, r *http.Request) {
-
-	tpl.ExecuteTemplate(w, "index.html", nil)
-
-}
-
-func OnboardingHandler(w http.ResponseWriter, r *http.Request) {
-	tpl.ExecuteTemplate(w, "onboarding.html", nil)
-}
-
 // CHECKING USERNAME AVAILABILITY HANDLER STARTS HERE
 func (db *DBstruct) UsernameAvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -97,14 +87,13 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	var err error
 
-
 	// Validate displayname
 	user.DisplayName, err = ValidateDisplayName(user.DisplayName)
 
 	if err != nil {
 		fmt.Println(err)
 
-		RegistrationResponse(w, http.StatusBadRequest, err.Error(),displayName)
+		RegistrationResponse(w, http.StatusBadRequest, err.Error(), displayName)
 		return
 	}
 
@@ -165,9 +154,11 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 		RegistrationResponse(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
+	//        hash session ID
+	hashedSessionId := GeneralHashFunction(sessionId)
 
 	//   inserting user details + sesession details into the database
-	insertingError := InsertUser(user, sessionId, db.DB, ctx)
+	insertingError := InsertUser(user, hashedSessionId, db.DB, ctx)
 
 	if insertingError != nil {
 		errMessage, code, ele := CheckUniqueConstraint(insertingError)
@@ -202,4 +193,72 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 	RegistrationResponse(w, http.StatusOK, "Account Created", "")
 
+}
+
+/*                            PAGES HANDLERS              */
+
+// home page
+func HomeHandler(w http.ResponseWriter, r *http.Request) {
+	tpl.ExecuteTemplate(w, "index.html", nil)
+}
+
+// onboarding page
+func OnboardingHandler(w http.ResponseWriter, r *http.Request) {
+	tpl.ExecuteTemplate(w, "onboarding.html", nil)
+}
+
+// email verification page
+func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	type VerifyEmailPageData struct {
+		Email     string
+		ExpiresAt time.Time
+	}
+
+	var data VerifyEmailPageData
+
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	hashedSession := GeneralHashFunction(sessionCookie.Value)
+
+	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	userDetails, err := GetUserDetails(r.Context(), db.DB, sessionDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	if userDetails.EmailVerified {
+		http.Redirect(w, r, "/", 303)
+		return
+	}
+
+	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, userDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	data.ExpiresAt = emailDetails.ExpiresAt
+	data.Email = MaskEmail(userDetails.Email)
+
+	err = tpl.ExecuteTemplate(w, "verify-email.html", data)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }

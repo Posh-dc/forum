@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="/frontend/verify-email.css">
+</head>
+
+<body>
+
+
+    <div class="main">
+
+        <div class="header">
+            <img class="mailIcon" src="/frontend/icons/email.png" alt="">
+            <h2>VERIFY YOUR EMAIL ADDRESS</h2>
+        </div>
+        <div class="note">
+            <h3>A verification code has been sent to <br> <strong>{{.Email}}</strong></h3> <br>
+            <p>Please check your inbox or Spam and enter the verification code below to verify your email address. The
+                code will
+                expire in .. <strong id="countdown" data-expires-at="{{.ExpiresAt.UTC.Format "2006-01-02T15:04:05Z"}}">
+                    --:--
+                </strong> </p>
+        </div>
+        <form action="">
+            <div class="inpt">
+                <input type="text" inputmode="numeric" maxlength="1" required>
+                <input type="text" inputmode="numeric" maxlength="1" required>
+                <input type="text" inputmode="numeric" maxlength="1" required>
+                <input type="text" inputmode="numeric" maxlength="1" required>
+                <input type="text" inputmode="numeric" maxlength="1" required>
+                <input type="text" inputmode="numeric" maxlength="1" required>
+            </div>
+            <button type="submit">Verify</button>
+        </form>
+        <div class="links">
+            <a href="">Resend code</a>
+            <a href="">Change email</a>
+        </div>
+
+    </div>
+
+    <script src="/frontend/verify-email.js"></script>
+</body>
+
+</html>

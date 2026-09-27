@@ -11,8 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CHECKING IF EMAIL, USERNAME AND  PHONE NUMBER ALREADY EXIST
+type UserStoredData struct {
+	UserID        string    `json:"id"`
+	UserName      string    `json:"username"`
+	DisplayName   string    `json:"display_name"`
+	Email         string    `json:"email"`
+	Password      string    `json:"password"`
+	PhoneNumber   string    `json:"phone_number"`
+	CreatedAT     time.Time `json:"created_at"`
+	UpdatedAT     time.Time `json:"updated_at"`
+	EmailVerified bool      `json:"is_email_verified"`
+}
 
+type UserEmailVerificationCodeStoredData struct {
+	ID        int64      `json:"id"`
+	UserID    string     `json:"user_id"`
+	CodeHash  string     `json:"code_hash"`
+	Attemppts int32      `json:"attempts"`
+	CreatedAT time.Time  `json:"created_at"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAT    *time.Time `json:"used_at"`
+}
+
+type UserSessionStoredData struct {
+	SessionValue string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	CreatedAT    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+// CHECKING IF EMAIL, USERNAME AND  PHONE NUMBER ALREADY EXIST
 func CheckAlreadyExist(column string, value any, pool *pgxpool.Pool, ctx context.Context) (bool, error) {
 
 	query := fmt.Sprintf("SELECT EXISTS (SELECT * from users where %v = $1)", column)
@@ -28,7 +56,7 @@ func CheckAlreadyExist(column string, value any, pool *pgxpool.Pool, ctx context
 }
 
 // FUNCION TO INSER USER REGISTRATION DETAILS STARTS HERE
-func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx context.Context) error {
+func InsertUser(user UserRegInfo, hashedSessionID string, pool *pgxpool.Pool, ctx context.Context) error {
 
 	tx, err := pool.Begin(ctx)
 
@@ -60,7 +88,7 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 	//             insert user session-id
 	_, err = tx.Exec(ctx, `INSERT INTO session(id, user_id, expires_at) VALUES($1,$2,$3);`,
-		sessionID,
+		hashedSessionID,
 		userID,
 		now.Add(time.Hour))
 
@@ -78,6 +106,7 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 	codeHashed := GeneralHashFunction(code)
 
+	// inserting verification code
 	_, err = tx.Exec(ctx, `INSERT INTO email_verification_codes(user_id, code_hash, expires_at) VALUES($1,$2,$3)`,
 		userID,
 		codeHashed,
@@ -110,7 +139,6 @@ func InsertUser(user UserRegInfo, sessionID string, pool *pgxpool.Pool, ctx cont
 
 }
 
-
 // FUNCTION TO CHECK UNIQUENESS
 func CheckUniqueConstraint(insertingError error) (error, int, string) {
 	var pgErr *pgconn.PgError
@@ -131,4 +159,69 @@ func CheckUniqueConstraint(insertingError error) (error, int, string) {
 	}
 }
 
+// GETTING USER SESSION DETAILS
+func GetUserSessionDetails(ctx context.Context, pool *pgxpool.Pool, sessionValue string) (UserSessionStoredData, error) {
 
+	var data UserSessionStoredData
+
+	err := pool.QueryRow(ctx, `SELECT * FROM session WHERE id = $1`, sessionValue).Scan(
+		&data.SessionValue,
+		&data.UserID,
+		&data.CreatedAT,
+		&data.ExpiresAt,
+	)
+
+	if err != nil {
+		return data, err
+	}
+
+	return data, nil
+}
+
+// GETTING USER USING SESSION ID
+func GetUserDetails(ctx context.Context, pool *pgxpool.Pool, userID string) (UserStoredData, error) {
+
+	var data UserStoredData
+	
+
+	err := pool.QueryRow(ctx, `SELECT * FROM users WHERE id = $1`, userID).Scan(
+		&data.UserID,
+		&data.UserName,
+		&data.DisplayName,
+		&data.Email,
+		&data.Password,
+		&data.PhoneNumber,
+		&data.CreatedAT,
+		&data.UpdatedAT,
+		&data.EmailVerified,
+	)
+
+	if err != nil {
+		return data, err
+	}
+
+	return data, nil
+}
+
+// GETTING USER EMAIL VERIFICATION DETAILS
+func GetUserEmailVerificationDetails(ctx context.Context, pool *pgxpool.Pool, userID string) (UserEmailVerificationCodeStoredData, error) {
+
+	var data UserEmailVerificationCodeStoredData
+
+	err := pool.QueryRow(ctx, `SELECT * FROM email_verification_codes WHERE user_id = $1`, userID).Scan(
+		&data.ID,
+		&data.UserID,
+		&data.CodeHash,
+		&data.Attemppts,
+		&data.CreatedAT,
+		&data.ExpiresAt,
+		&data.UsedAT,
+	)
+
+	if err != nil {
+		return data, err
+	}
+
+	return data, nil
+
+}

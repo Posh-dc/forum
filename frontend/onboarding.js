@@ -111,7 +111,7 @@ form.addEventListener("submit", (e) => {
             errorDisplay.style.display = "block"
         } else if (result.status === 200) {
             errorDisplay.style.display = "none"
-            window.location.href = "/";
+            window.location.href = "/verify-email";
         } else {
             errorDisplay.innerText = "Something went wrong. Please try again.";
             errorDisplay.style.display = "block";

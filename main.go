@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"main/backEnd"
-	"time"
 
 	"net/http"
 	"os"
@@ -41,10 +40,8 @@ func databaseConnect(ctx context.Context) (*pgxpool.Pool, error) {
 }
 
 func main() {
-	ctx, cancle := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx := context.Background()
 
-	ctxx, cancle := context.WithTimeout(context.Background(), time.Hour)
-	defer cancle()
 	godotenv.Load()
 
 	pool, dbError := databaseConnect(ctx)
@@ -59,18 +56,10 @@ func main() {
 		DB: pool,
 	}
 
-	// backEnd.SendMail()
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
 
-	// emails, err := backEnd.GetPendingEmails(ctx, pool)
-
-	// if err != nil {
-	// 	fmt.Printf("Getpending email error : %w", err)
-	// 	log.Fatal()
-	// }
-
-	// fmt.Printf("%+v", emails)
-
-	backEnd.ProcessPendingEmails(ctxx, pool)
+	go backEnd.StartEmailWorker(workerCtx, pool)
 
 	mux := http.NewServeMux()
 
@@ -83,9 +72,12 @@ func main() {
 	mux.HandleFunc("/", backEnd.HomeHandler)
 
 	// registration and loging routers
-	mux.HandleFunc("/onboarding", backEnd.OnboardingHandler)
-	mux.HandleFunc("/userName", dbConnect.UsernameAvailabilityHandler)
-	mux.HandleFunc("/register", dbConnect.CreateAccountHandler)
+	mux.HandleFunc("GET /onboarding", backEnd.OnboardingHandler)
+	mux.HandleFunc("POST /userName", dbConnect.UsernameAvailabilityHandler)
+	mux.HandleFunc("POST /register", dbConnect.CreateAccountHandler)
+
+	// email verification routers
+	mux.HandleFunc("GET /verify-email", dbConnect.VerifyEmailPageHandler)
 
 	server := &http.Server{
 		Addr:    os.Getenv("PORT"),
