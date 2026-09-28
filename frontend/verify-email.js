@@ -1,5 +1,7 @@
 
 
+let errorDisplay = document.getElementById("errorMessage");
+
 // controling user input STARTS here 
 const inputs = document.querySelectorAll(".inpt input");
 
@@ -67,7 +69,7 @@ let form = document.getElementById("form")
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-   
+
 
     const formData = new FormData(form);
 
@@ -78,7 +80,18 @@ form.addEventListener("submit", (e) => {
     fetch("/verify-email", {
         method: "POST",
         body: formData
-    });
+    }).then((res) => {
+        return res.text().then((data) => ({
+            status: res.status,
+            res: data
+        }));
+    }).then((result) => {
+
+        errorMessage.textContent = result.res;
+        errorMessage.style.visibility = "visible";
+        console.log(result.status)
+        console.log(result.res)
+    })
 });
 
 

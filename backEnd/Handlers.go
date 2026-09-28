@@ -243,7 +243,7 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if userDetails.EmailVerified {
-		http.Error(w, "Email Already Verified", http.StatusSeeOther)
+		http.Error(w, "Email Already Verified", 201)
 		return
 	}
 
@@ -256,7 +256,7 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if emailDetails.Attempts >= 5 {
-		http.Error(w, "More than five Attempt", http.StatusConflict)
+		http.Error(w, "More than five Attempt", http.StatusTooManyRequests)
 		return
 	}
 
@@ -280,7 +280,7 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Error(w, "Invalid verification code", http.StatusUnauthorized)
+		http.Error(w, "Invalid verification code", http.StatusBadRequest)
 		return
 	}
 
@@ -328,7 +328,7 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	fmt.Fprint(w, "Email verified ")
 }
 
 /*                            PAGES HANDLERS              */
