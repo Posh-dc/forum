@@ -59,3 +59,29 @@ updateCountdown();
 const timer = setInterval(updateCountdown, 1000);
 
 // Handling live count down ENDS here
+
+
+// Sending the verification to backend starts here
+
+let form = document.getElementById("form")
+form.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+   
+
+    const formData = new FormData(form);
+
+    for (const [key, value] of formData) {
+        console.log(key, value);
+    }
+
+    fetch("/verify-email", {
+        method: "POST",
+        body: formData
+    });
+});
+
+
+
+
+// Sending the verification to backend starts here

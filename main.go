@@ -78,7 +78,7 @@ func main() {
 
 	// email verification routers
 	mux.HandleFunc("GET /verify-email", dbConnect.VerifyEmailPageHandler)
-
+	mux.HandleFunc("POST /verify-email", dbConnect.VerifyEmailHandler)
 	server := &http.Server{
 		Addr:    os.Getenv("PORT"),
 		Handler: mux,

@@ -195,6 +195,142 @@ func (db *DBstruct) CreateAccountHandler(w http.ResponseWriter, r *http.Request)
 
 }
 
+// VERIFYING EMAIL VERIFICATION CODE FROM USER HANDLER STARTS HERE
+func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
+
+	code := r.FormValue("1") + r.FormValue("2") + r.FormValue("3") + r.FormValue("4") + r.FormValue("5") + r.FormValue("6")
+
+	fmt.Println(code)
+
+	if len(code) != 6 {
+		http.Error(w, "Invalid verification code", http.StatusBadRequest)
+		return
+	}
+
+	for _, r := range code {
+		if r < '0' || r > '9' {
+			http.Error(w, "Invalid verification code", http.StatusBadRequest)
+			return
+		}
+	}
+
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	hashedSession := GeneralHashFunction(sessionCookie.Value)
+
+	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if time.Now().After(sessionDetails.ExpiresAt) {
+		http.Error(w, "Session expired", http.StatusUnauthorized)
+		return
+	}
+
+	userDetails, err := GetUserDetails(r.Context(), db.DB, sessionDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if userDetails.EmailVerified {
+		http.Error(w, "Email Already Verified", http.StatusSeeOther)
+		return
+	}
+
+	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, userDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if emailDetails.Attempts >= 5 {
+		http.Error(w, "More than five Attempt", http.StatusConflict)
+		return
+	}
+
+	if time.Now().After(emailDetails.ExpiresAt) {
+		http.Error(w, "Verification code expired", http.StatusGone)
+		return
+	}
+
+	if !VerifyGeneralHash(code, emailDetails.CodeHash) {
+
+		_, err := db.DB.Exec(r.Context(), `
+        UPDATE email_verification_codes
+        SET attempts = attempts + 1
+        WHERE id = $1
+		AND attempts < 5
+    `, emailDetails.ID)
+
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		http.Error(w, "Invalid verification code", http.StatusUnauthorized)
+		return
+	}
+
+	tx, err := db.DB.Begin(r.Context())
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	defer tx.Rollback(r.Context())
+
+	tag, err := tx.Exec(r.Context(), `
+    UPDATE email_verification_codes
+    SET used_at = NOW()
+    WHERE id = $1
+      AND used_at IS NULL
+      AND expires_at > NOW()
+`, emailDetails.ID)
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if tag.RowsAffected() != 1 {
+		http.Error(w, "Verification code is no longer valid", http.StatusGone)
+		return
+	}
+
+	_, err = tx.Exec(r.Context(), `
+      UPDATE users
+      SET is_email_verified = true
+       WHERE id = $1
+    `, emailDetails.UserID)
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 /*                            PAGES HANDLERS              */
 
 // home page
@@ -229,6 +365,11 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		fmt.Println(err)
 		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	if time.Now().After(sessionDetails.ExpiresAt) {
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}
 

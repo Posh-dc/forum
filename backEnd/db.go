@@ -27,7 +27,7 @@ type UserEmailVerificationCodeStoredData struct {
 	ID        int64      `json:"id"`
 	UserID    string     `json:"user_id"`
 	CodeHash  string     `json:"code_hash"`
-	Attemppts int32      `json:"attempts"`
+	Attempts int32      `json:"attempts"`
 	CreatedAT time.Time  `json:"created_at"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAT    *time.Time `json:"used_at"`
@@ -182,7 +182,6 @@ func GetUserSessionDetails(ctx context.Context, pool *pgxpool.Pool, sessionValue
 func GetUserDetails(ctx context.Context, pool *pgxpool.Pool, userID string) (UserStoredData, error) {
 
 	var data UserStoredData
-	
 
 	err := pool.QueryRow(ctx, `SELECT * FROM users WHERE id = $1`, userID).Scan(
 		&data.UserID,
@@ -212,7 +211,7 @@ func GetUserEmailVerificationDetails(ctx context.Context, pool *pgxpool.Pool, us
 		&data.ID,
 		&data.UserID,
 		&data.CodeHash,
-		&data.Attemppts,
+		&data.Attempts,
 		&data.CreatedAT,
 		&data.ExpiresAt,
 		&data.UsedAT,
