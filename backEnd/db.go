@@ -27,7 +27,7 @@ type UserEmailVerificationCodeStoredData struct {
 	ID        int64      `json:"id"`
 	UserID    string     `json:"user_id"`
 	CodeHash  string     `json:"code_hash"`
-	Attempts int32      `json:"attempts"`
+	Attempts  int32      `json:"attempts"`
 	CreatedAT time.Time  `json:"created_at"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAT    *time.Time `json:"used_at"`
@@ -90,7 +90,7 @@ func InsertUser(user UserRegInfo, hashedSessionID string, pool *pgxpool.Pool, ct
 	_, err = tx.Exec(ctx, `INSERT INTO session(id, user_id, expires_at) VALUES($1,$2,$3);`,
 		hashedSessionID,
 		userID,
-		now.Add(time.Hour))
+		now.Add(24 * time.Hour))
 
 	if err != nil {
 		return err
@@ -179,11 +179,13 @@ func GetUserSessionDetails(ctx context.Context, pool *pgxpool.Pool, sessionValue
 }
 
 // GETTING USER USING SESSION ID
-func GetUserDetails(ctx context.Context, pool *pgxpool.Pool, userID string) (UserStoredData, error) {
+func GetUserDetails(ctx context.Context, pool *pgxpool.Pool, column string, value any) (UserStoredData, error) {
 
 	var data UserStoredData
 
-	err := pool.QueryRow(ctx, `SELECT * FROM users WHERE id = $1`, userID).Scan(
+	query := fmt.Sprintf(`SELECT * FROM users WHERE %v = $1`, column)
+
+	err := pool.QueryRow(ctx, query, value).Scan(
 		&data.UserID,
 		&data.UserName,
 		&data.DisplayName,

@@ -56,9 +56,10 @@ function updateCountdown() {
         `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-updateCountdown();
 
 const timer = setInterval(updateCountdown, 1000);
+
+updateCountdown();
 
 // Handling live count down ENDS here
 
@@ -69,7 +70,7 @@ let form = document.getElementById("form")
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-
+    alert("i am here")
 
     const formData = new FormData(form);
 
@@ -87,10 +88,23 @@ form.addEventListener("submit", (e) => {
         }));
     }).then((result) => {
 
-        errorMessage.textContent = result.res;
-        errorMessage.style.visibility = "visible";
-        console.log(result.status)
-        console.log(result.res)
+        if (result.status === 400 || result.status === 410 || result.status === 429) {
+            errorMessage.style.visibility = "visible";
+            errorMessage.textContent = result.res;
+
+        } else if (result.status === 200 || result.status === 201) {
+            errorMessage.style.visibility = "none";
+            window.location.href = "/";
+
+        } else if (result.status === 401) {
+            errorMessage.style.visibility = "none";
+            window.location.href = "/onboarding";
+
+        } else {
+            errorDisplay.textContent = "Something went wrong. Please try again";
+            errorDisplay.style.visibility = "visible";
+        }
+
     })
 });
 

@@ -75,10 +75,12 @@ func main() {
 	mux.HandleFunc("GET /onboarding", backEnd.OnboardingHandler)
 	mux.HandleFunc("POST /userName", dbConnect.UsernameAvailabilityHandler)
 	mux.HandleFunc("POST /register", dbConnect.CreateAccountHandler)
+	mux.HandleFunc("POST /login", dbConnect.LoginAccountHandler)
 
 	// email verification routers
 	mux.HandleFunc("GET /verify-email", dbConnect.VerifyEmailPageHandler)
 	mux.HandleFunc("POST /verify-email", dbConnect.VerifyEmailHandler)
+
 	server := &http.Server{
 		Addr:    os.Getenv("PORT"),
 		Handler: mux,

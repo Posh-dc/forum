@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -75,6 +76,42 @@ func HashPassword(password string) (string, error) {
 	return fmt.Sprintf("%s.%s", encodeSalt, encodeHash), nil
 }
 
+// GENERATING HASHED PASSWORD
+func VerifyPassword(password string, storedHash string) bool {
+
+	parts := strings.Split(storedHash, ".")
+
+	if len(parts) != 2 {
+		return false
+	}
+
+	salt, err := base64.RawURLEncoding.DecodeString(parts[0])
+
+	if err != nil {
+		return false
+	}
+
+	expectedHash, err := base64.RawURLEncoding.DecodeString(parts[1])
+
+	if err != nil {
+		return false
+	}
+
+	newHash := argon2.IDKey(
+		[]byte(password),
+		salt,
+		argonTime,
+		argonMemory,
+		argonThreads,
+		hashLenght,
+	)
+
+	return subtle.ConstantTimeCompare(
+		newHash,
+		expectedHash,
+	) == 1
+}
+
 // GENERATING VERIFICATION CODE TO SEND TO USER EMAIL
 func GenerateVerificationCode() (string, error) {
 
@@ -93,7 +130,6 @@ func GeneralHashFunction(data string) string {
 
 	return hex.EncodeToString(hash[:])
 }
-
 
 // FUNCTION THAT VERIFIES GENERAL HASH
 func VerifyGeneralHash(data string, expectedHashed string) bool {

@@ -19,14 +19,15 @@
         </div>
         <div class="note">
             <h3>A verification code has been sent to <br> <strong>{{.Email}}</strong></h3> <br>
+            <p id="errorMessage"></p>
             <p>Please check your inbox or Spam and enter the verification code below to verify your email address. The
                 code will
                 expire in .. <strong id="countdown" data-expires-at="{{.ExpiresAt.UTC.Format "2006-01-02T15:04:05Z"}}">
                     --:--
                 </strong> </p>
         </div>
-        <form id="form">
-            
+        <form id="form" method="POST">
+
             <div class="inpt">
                 <input type="text" name="1" inputmode="numeric" maxlength="1" required>
                 <input type="text" name="2" inputmode="numeric" maxlength="1" required>
@@ -41,8 +42,7 @@
             <a href="">Resend code</a>
             <a href="">Change email</a>
         </div>
-        
-        <p id="errorMessage"></p>
+
     </div>
 
     <script src="/frontend/verify-email.js"></script>

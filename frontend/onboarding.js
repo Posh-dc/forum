@@ -10,6 +10,7 @@ const sliderButtons = document.querySelectorAll(".option");
 
 
 sliderButtons[0].addEventListener("click", () => {
+    errorDisplay.style.display = "none"
     switchElement.classList.remove("register-active");
     document.querySelector(".loginDiv").style.display = "none";
     document.querySelector(".registerDiv").style.display = "block";
@@ -17,6 +18,7 @@ sliderButtons[0].addEventListener("click", () => {
 });
 
 sliderButtons[1].addEventListener("click", () => {
+    errorDisplay.style.display = "none"
     switchElement.classList.add("register-active");
     document.querySelector(".registerDiv").style.display = "none";
     document.querySelector(".loginDiv").style.display = "block";
@@ -81,7 +83,7 @@ form.addEventListener("submit", (e) => {
 
     const userData = new FormData(form);
 
-
+    
     const formObject = Object.fromEntries(userData);
 
 
@@ -113,14 +115,9 @@ form.addEventListener("submit", (e) => {
             errorDisplay.style.display = "none"
             window.location.href = "/verify-email";
         } else {
-            errorDisplay.innerText = "Something went wrong. Please try again.";
+            errorDisplay.innerText = "Something went wrong. Please try again";
             errorDisplay.style.display = "block";
         }
-
-        console.log(ele)
-        console.log(result.status)
-        console.log(result.res.Message)
-        console.log(result.res.ElementId)
     });
 
 });
@@ -140,3 +137,52 @@ function clearRegistrationErrors() {
 
 
 
+//    sending user LOGIN details to backend STARTS here
+
+
+const loginForm = document.querySelector(".login");
+
+
+loginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const userData = new FormData(loginForm);
+
+    const formObject = Object.fromEntries(userData);
+
+
+
+    fetch("/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(formObject)
+
+    }).then((res) => {
+        return res.text().then((data) => ({
+            status: res.status,
+            res: data
+        }));
+
+    }).then((result) => {
+
+        if (result.status === 401 || result.status === 400) {
+
+            errorDisplay.innerText = result.res;
+            errorDisplay.style.display = "block"
+        } else if (result.status === 200) {
+            errorDisplay.style.display = "none"
+            window.location.href = "/"
+        } else {
+            errorDisplay.innerText = "Something went wrong please try again";
+            errorDisplay.style.display = "block"
+        }
+
+    });
+
+});
+
+
+
+//     sending user LOGIN details to backend ENDS here
