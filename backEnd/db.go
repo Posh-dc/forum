@@ -24,13 +24,13 @@ type UserStoredData struct {
 }
 
 type UserEmailVerificationCodeStoredData struct {
-	ID        int64      `json:"id"`
-	UserID    string     `json:"user_id"`
-	CodeHash  string     `json:"code_hash"`
-	Attempts  int32      `json:"attempts"`
-	CreatedAT time.Time  `json:"created_at"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	UsedAT    *time.Time `json:"used_at"`
+	ID        int64     `json:"id"`
+	UserID    string    `json:"user_id"`
+	CodeHash  string    `json:"code_hash"`
+	Attempts  int32     `json:"attempts"`
+	CreatedAT time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Purpose   string    `json:"purpose"`
 }
 
 type UserSessionStoredData struct {
@@ -90,7 +90,7 @@ func InsertUser(user UserRegInfo, hashedSessionID string, pool *pgxpool.Pool, ct
 	_, err = tx.Exec(ctx, `INSERT INTO session(id, user_id, expires_at) VALUES($1,$2,$3);`,
 		hashedSessionID,
 		userID,
-		now.Add(24 * time.Hour))
+		now.Add(24*time.Hour))
 
 	if err != nil {
 		return err
@@ -106,11 +106,12 @@ func InsertUser(user UserRegInfo, hashedSessionID string, pool *pgxpool.Pool, ct
 
 	codeHashed := GeneralHashFunction(code)
 
-	// inserting verification code
-	_, err = tx.Exec(ctx, `INSERT INTO email_verification_codes(user_id, code_hash, expires_at) VALUES($1,$2,$3)`,
+	// inserting email verification code
+	_, err = tx.Exec(ctx, `INSERT INTO email_verification_codes(user_id, code_hash, expires_at, purpose) VALUES($1,$2,$3,$4)`,
 		userID,
 		codeHashed,
 		now.Add(10*time.Minute),
+		"email_verification",
 	)
 
 	if err != nil {
@@ -121,6 +122,93 @@ func InsertUser(user UserRegInfo, hashedSessionID string, pool *pgxpool.Pool, ct
 
 	_, err = tx.Exec(ctx, `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
 		user.Email,
+		EmailVerificationSubject,
+		CreateVerificationEmailBody(code),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// CHANGING USER EMAIL
+func ChangeUserEmail(ctx context.Context, pool *pgxpool.Pool, userID string, newEmail string) error {
+
+	tx, err := pool.Begin(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback(ctx)
+
+	// var userID string
+
+	//             insert user details
+	tag, err := tx.Exec(ctx,
+		`UPDATE users 
+	     SET email = $1,
+		    updated_at = NOW(),
+			is_email_verified = false
+		   WHERE id = $2 `,
+		newEmail,
+		userID,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() != 1 {
+		return errors.New("user not found")
+	}
+
+	// generating and saving verification code
+
+	code, err := GenerateVerificationCode()
+
+	if err != nil {
+		return fmt.Errorf("Generating Verification code Error: %w", err)
+	}
+
+	codeHashed := GeneralHashFunction(code)
+
+	expiresAt := time.Now().Add(10 * time.Minute)
+	// Replace existing verification code
+	tag, err = tx.Exec(ctx, `
+        UPDATE email_verification_codes
+        SET code_hash = $1,
+            attempts = 0,
+            created_at = NOW(),
+            expires_at = $2
+        WHERE user_id = $3
+    `,
+		codeHashed,
+		expiresAt,
+		userID,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() != 1 {
+		return errors.New("verification record not found")
+	}
+
+	// email_outbox starts here
+
+	_, err = tx.Exec(ctx, `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
+		newEmail,
 		EmailVerificationSubject,
 		CreateVerificationEmailBody(code),
 	)
@@ -205,18 +293,20 @@ func GetUserDetails(ctx context.Context, pool *pgxpool.Pool, column string, valu
 }
 
 // GETTING USER EMAIL VERIFICATION DETAILS
-func GetUserEmailVerificationDetails(ctx context.Context, pool *pgxpool.Pool, userID string) (UserEmailVerificationCodeStoredData, error) {
+func GetUserEmailVerificationDetails(ctx context.Context, pool *pgxpool.Pool, column string, value any) (UserEmailVerificationCodeStoredData, error) {
 
 	var data UserEmailVerificationCodeStoredData
 
-	err := pool.QueryRow(ctx, `SELECT * FROM email_verification_codes WHERE user_id = $1`, userID).Scan(
+	query := fmt.Sprintf("SELECT * FROM email_verification_codes WHERE %s = $1", column)
+
+	err := pool.QueryRow(ctx, query, value).Scan(
 		&data.ID,
 		&data.UserID,
 		&data.CodeHash,
 		&data.Attempts,
 		&data.CreatedAT,
 		&data.ExpiresAt,
-		&data.UsedAT,
+		&data.Purpose,
 	)
 
 	if err != nil {

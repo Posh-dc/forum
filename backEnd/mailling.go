@@ -27,6 +27,18 @@ func CreateVerificationEmailBody(code string) string {
 		code,
 	)
 }
+func CreateResetVericationToken(name string, code string) string {
+	return fmt.Sprintf(
+		"Hello %s,\r\n"+
+			"\r\n"+
+			"Please Click the link to reset your Lobaloba X-Forum password.\r\n"+
+			"\r\n"+
+			"Your verification link is: %s\r\n"+
+			"\r\n"+
+			"This code expires in 10 minutes.\r\n",
+		name, code,
+	)
+}
 
 type Email struct {
 	ID             int64

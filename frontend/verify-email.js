@@ -70,7 +70,6 @@ let form = document.getElementById("form")
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-    alert("i am here")
 
     const formData = new FormData(form);
 
@@ -93,6 +92,46 @@ form.addEventListener("submit", (e) => {
             errorMessage.textContent = result.res;
 
         } else if (result.status === 200 || result.status === 201) {
+            errorMessage.style.visibility = "hidden";
+            window.location.href = "/";
+
+        } else if (result.status === 401) {
+            errorMessage.style.visibility = "hidden";
+            window.location.href = "/onboarding";
+
+        } else {
+            errorDisplay.textContent = "Something went wrong. Please try again";
+            errorDisplay.style.visibility = "visible";
+        }
+
+    })
+});
+
+
+// Sending the verification to backend starts here
+
+
+
+// handling resend verification code starts here 
+let resendCode = document.getElementById("resendCode");
+
+resendCode.addEventListener("click", (e) => {
+    e.preventDefault();
+
+    fetch("/resend-code", {
+        method: "POST"
+    }).then((res) => {
+        return res.text().then((data) => ({
+            status: res.status,
+            res: data
+        }));
+    }).then((result) => {
+
+        if (result.status === 200 || result.status === 429) {
+            errorMessage.style.visibility = "visible";
+            errorMessage.textContent = result.res;
+
+        } else if (result.status === 409) {
             errorMessage.style.visibility = "none";
             window.location.href = "/";
 
@@ -106,9 +145,4 @@ form.addEventListener("submit", (e) => {
         }
 
     })
-});
-
-
-
-
-// Sending the verification to backend starts here
+})

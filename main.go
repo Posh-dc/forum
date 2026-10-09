@@ -80,6 +80,15 @@ func main() {
 	// email verification routers
 	mux.HandleFunc("GET /verify-email", dbConnect.VerifyEmailPageHandler)
 	mux.HandleFunc("POST /verify-email", dbConnect.VerifyEmailHandler)
+	mux.HandleFunc("POST /resend-code", dbConnect.ResendEmailHandler)
+	mux.HandleFunc("GET /change-email", dbConnect.ChangeEmailPageHandler)
+	mux.HandleFunc("POST /change-email", dbConnect.ChangeEmailHandler)
+
+	// forget password routers
+	mux.HandleFunc("GET /forget-password", backEnd.ForgetPasswordPageHandler)
+	mux.HandleFunc("POST /forget-password", dbConnect.ForgetPasswordHandler)
+	mux.HandleFunc("GET /change-password", dbConnect.ChangePasswordPageHandler)
+	mux.HandleFunc("POST /change-password", dbConnect.ChangePasswordHandler)
 
 	server := &http.Server{
 		Addr:    os.Getenv("PORT"),

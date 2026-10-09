@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="/frontend/change-email.css">
+</head>
+
+<body>
+
+
+    <div class="main">
+
+        <div class="header">
+            <img class="mailIcon" src="/frontend/icons/email.png" alt="">
+            <h2>CHANGE YOUR EMAIL ADDRESS</h2>
+        </div>
+        <div class="note">
+            <h3>Your current email is : <br> <strong>{{.Email}}</strong></h3> <br>
+            <p id="errorMessage"></p>
+            <p>Enter your new email address below. <br> We'll send a new verification code
+                to this address.</p>
+        </div>
+        <form id="changeEmail" >
+            <div>
+                <label for=""><sup>*</sup>New Email</label>
+                <input type="email" id="email" placeholder="Enter your new Email Address" name="emailAddress">
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+
+        <a href="">← Back to verification page </a>
+    </div>
+
+    <script src="/frontend/change-email.js"></script>
+</body>
+
+</html>

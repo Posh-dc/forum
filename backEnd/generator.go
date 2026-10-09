@@ -33,6 +33,17 @@ func GenerateSessionId() (string, error) {
 
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
+func GenerateRandomToken() (string, error) {
+
+	b := make([]byte, 32)
+
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
 // RANDOM SALT GENERATOR
 func GenerateSalt() ([]byte, error) {

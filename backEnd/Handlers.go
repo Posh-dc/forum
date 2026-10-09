@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -260,7 +261,7 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, userDetails.UserID)
+	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, "user_id", userDetails.UserID)
 
 	if err != nil {
 		fmt.Println(err)
@@ -307,10 +308,8 @@ func (db *DBstruct) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	tag, err := tx.Exec(r.Context(), `
-    UPDATE email_verification_codes
-    SET used_at = NOW()
+    DELETE FROM email_verification_codes
     WHERE id = $1
-      AND used_at IS NULL
       AND expires_at > NOW()
   `, emailDetails.ID)
 
@@ -423,6 +422,329 @@ func (db *DBstruct) LoginAccountHandler(w http.ResponseWriter, r *http.Request) 
 
 }
 
+// RESEND VERIFICATION CODE EMAIL  STARTS HERE
+func (db *DBstruct) ResendEmailHandler(w http.ResponseWriter, r *http.Request) {
+
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	hashedSession := GeneralHashFunction(sessionCookie.Value)
+
+	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
+	if err != nil {
+		fmt.Println(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Unathorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if time.Now().After(sessionDetails.ExpiresAt) {
+		http.Error(w, "Session expired", http.StatusUnauthorized)
+		return
+	}
+
+	userDetails, err := GetUserDetails(r.Context(), db.DB, "id", sessionDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Unathorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if userDetails.EmailVerified {
+		http.Error(w, "Email Already Verified", http.StatusConflict)
+		return
+	}
+
+	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, "user_id", userDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if time.Since(emailDetails.CreatedAT) < time.Minute {
+		http.Error(w, "Please wait before requesting another code", http.StatusTooManyRequests)
+		return
+	}
+
+	tx, err := db.DB.Begin(r.Context())
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	defer tx.Rollback(r.Context())
+
+	// generating and saving verification code
+
+	code, err := GenerateVerificationCode()
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	codeHashed := GeneralHashFunction(code)
+
+	now := time.Now()
+
+	// inserting verification code
+
+	tag, err := tx.Exec(r.Context(), `UPDATE email_verification_codes
+	    SET code_hash = $1,
+          attempts = 0,
+          created_at = NOW(),
+          expires_at = $2
+		WHERE id = $3 AND created_at < NOW() - INTERVAL '1 minute'
+		`, codeHashed, now.Add(10*time.Minute), emailDetails.ID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if tag.RowsAffected() != 1 {
+		http.Error(w, "Please wait before requesting another code", http.StatusTooManyRequests)
+		return
+	}
+
+	// email_outbox starts here
+
+	_, err = tx.Exec(r.Context(), `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
+		userDetails.Email,
+		EmailVerificationSubject,
+		CreateVerificationEmailBody(code),
+	)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tx.Commit(r.Context())
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprint(w, "Code has been resend")
+}
+
+// CHANGING USER EMAIL HANDLER STARTS HERE
+func (db *DBstruct) ChangeEmailHandler(w http.ResponseWriter, r *http.Request) {
+
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	hashedSession := GeneralHashFunction(sessionCookie.Value)
+
+	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
+	if err != nil {
+		fmt.Println(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Unathorized", http.StatusUnauthorized)
+			return
+		}
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if time.Now().After(sessionDetails.ExpiresAt) {
+		http.Error(w, "Session expired", http.StatusUnauthorized)
+		return
+	}
+
+	userDetails, err := GetUserDetails(r.Context(), db.DB, "id", sessionDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Unathorized", http.StatusUnauthorized)
+			return
+		}
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if userDetails.EmailVerified {
+		http.Error(w, "Email Already Verified", http.StatusConflict)
+		return
+	}
+
+	//   validating the new email
+	newEmail := r.FormValue("emailAddress")
+	fmt.Println(newEmail)
+
+	if newEmail == userDetails.Email {
+		http.Error(w, "This is already your email address", http.StatusConflict)
+		return
+	}
+
+	newEmail, err = ValidateEmail(newEmail)
+
+	if err != nil {
+		fmt.Println("Validating email err : ", err)
+		http.Error(w, "Invalid email address", http.StatusBadRequest)
+		return
+	}
+
+	//   validating the new email
+	err = ChangeUserEmail(r.Context(), db.DB, userDetails.UserID, newEmail)
+
+	if err != nil {
+
+		var pgErr *pgconn.PgError
+
+		if err.Error() == "user not found" {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		if errors.As(err, &pgErr) {
+			if pgErr.ConstraintName == "users_email_key" {
+				http.Error(w, "Email Already Exist", http.StatusConflict)
+				return
+			}
+		}
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprint(w, "Email changed")
+}
+
+// FORGERT PASSWORD HANDLER STARTS HERE
+func (db *DBstruct) ForgetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+
+	newEmail := r.FormValue("emailAddress")
+	fmt.Println(newEmail)
+
+	newEmail, err := ValidateEmail(newEmail)
+	if err != nil {
+		fmt.Println()
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userInfo, err := GetUserDetails(r.Context(), db.DB, "email", newEmail)
+
+	if err != nil {
+		fmt.Println(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "If an account exists for this email, a password reset link has been sent.", http.StatusNotFound)
+			return
+		}
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	code, err := GenerateRandomToken()
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	token := GeneralHashFunction(code)
+	now := time.Now()
+	ctx := r.Context()
+	tx, err := db.DB.Begin(ctx)
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	defer tx.Rollback(ctx)
+
+	//  invalidating previous password reset link by deleting it from the table
+	_, err = tx.Exec(ctx, `DELETE FROM email_verification_codes WHERE user_id = $1 AND purpose = $2`,
+		userInfo.UserID,
+		"password_reset",
+	)
+
+	if err != nil {
+		fmt.Println("could not insert into email verification code/link", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// inserting verification code
+	_, err = tx.Exec(ctx, `INSERT INTO email_verification_codes(user_id, code_hash, expires_at, purpose) VALUES($1,$2,$3,$4)`,
+		userInfo.UserID,
+		token,
+		now.Add(10*time.Minute),
+		"password_reset",
+	)
+
+	if err != nil {
+		fmt.Println("could not insert into email verification code/link", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// email_outbox starts here
+
+	_, err = tx.Exec(ctx, `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
+		userInfo.Email,
+		"Rest your account password\r\n",
+		CreateResetVericationToken(userInfo.UserName, "http://localhost:9090/change-password?token="+code),
+	)
+
+	if err != nil {
+		fmt.Println("could not insert into outbox", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		fmt.Println("could not comomit transaction", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	email := MaskEmail(userInfo.Email)
+	fmt.Fprint(w, email)
+
+}
+
+// CHANGE PASSWORD HANGLER STARTS HERE
+func (db *DBstruct) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
+
+	password := r.FormValue("password")
+
+	fmt.Println(string(password))
+}
+
 /*                            PAGES HANDLERS              */
 
 // home page
@@ -445,8 +767,6 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 
 	var data VerifyEmailPageData
 
-	fmt.Println("INSIDE HERE")
-
 	sessionCookie, err := r.Cookie("session_id")
 	if err != nil {
 		http.Redirect(w, r, "/onboarding", 303)
@@ -457,7 +777,7 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 
 	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Getting session details error: ", err)
 		http.Redirect(w, r, "/onboarding", 303)
 		return
 	}
@@ -470,7 +790,7 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 	userDetails, err := GetUserDetails(r.Context(), db.DB, "id", sessionDetails.UserID)
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Getting user details error: ", err)
 		http.Redirect(w, r, "/onboarding", 303)
 		return
 	}
@@ -482,11 +802,11 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, userDetails.UserID)
+	emailDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, "user_id", userDetails.UserID)
 
 	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		fmt.Println("Getting email verification details error: ", err)
+		http.Redirect(w, r, "/onboarding", 303)
 		return
 	}
 
@@ -498,4 +818,96 @@ func (db *DBstruct) VerifyEmailPageHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+}
+
+// page for changing email page
+func (db *DBstruct) ChangeEmailPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	type VerifyEmailPageData struct {
+		Email string
+		// ExpiresAt time.Time
+	}
+
+	var data VerifyEmailPageData
+
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	hashedSession := GeneralHashFunction(sessionCookie.Value)
+
+	sessionDetails, err := GetUserSessionDetails(r.Context(), db.DB, hashedSession)
+	if err != nil {
+		fmt.Println("Getting session details error: ", err)
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	if time.Now().After(sessionDetails.ExpiresAt) {
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
+		return
+	}
+
+	userDetails, err := GetUserDetails(r.Context(), db.DB, "id", sessionDetails.UserID)
+
+	if err != nil {
+		fmt.Println("Getting user details error: ", err)
+		http.Redirect(w, r, "/onboarding", 303)
+		return
+	}
+
+	if userDetails.EmailVerified {
+		http.Redirect(w, r, "/", 303)
+		return
+	}
+
+	data.Email = MaskEmail(userDetails.Email)
+
+	err = tpl.ExecuteTemplate(w, "change-email.html", data)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// forget password page
+func ForgetPasswordPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	err := tpl.ExecuteTemplate(w, "forget-password.html", nil)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// forget password page
+func (db *DBstruct) ChangePasswordPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	type OutputData struct {
+		ExpiresAt time.Time
+	}
+
+	var data OutputData
+	code := r.URL.Query().Get("token")
+
+	codeHash := GeneralHashFunction(code)
+
+	emailVerificationDetails, err := GetUserEmailVerificationDetails(r.Context(), db.DB, "code_hash", codeHash)
+	if err != nil {
+		fmt.Println(err)
+		tpl.ExecuteTemplate(w, "change-error.html", nil)
+		return
+	}
+
+	if time.Since(emailVerificationDetails.ExpiresAt) > 10*time.Minute {
+		tpl.ExecuteTemplate(w, "change-error.html", nil)
+		return
+	}
+
+	data.ExpiresAt = emailVerificationDetails.ExpiresAt
+
+	tpl.ExecuteTemplate(w, "change-password.html", data)
+
 }
