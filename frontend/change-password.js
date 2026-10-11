@@ -1,6 +1,7 @@
-let changePassword = document.getElementById("forgetPassword");
 
 
+let errorMessage = document.getElementById("errorMessage");
+const resultElement = document.getElementById("result");
 
 // Handling live count down STARTS here
 const countdown = document.getElementById("countdown");
@@ -36,12 +37,15 @@ updateCountdown();
 
 // Handling live count down ENDS here
 
+const token = new URLSearchParams(window.location.search).get("token");
+
+let changePassword = document.getElementById("forgetPassword");
 changePassword.addEventListener("submit", (e) => {
     e.preventDefault();
 
 
     let data = new FormData(changePassword)
-    fetch("/change-password", {
+    fetch(`/change-password?token=${encodeURIComponent(token)}`, {
         method: "POST",
         body: data
     }).then((res) => {
@@ -51,22 +55,28 @@ changePassword.addEventListener("submit", (e) => {
         }));
     }).then((result) => {
 
-        // if (result.status === 400 || result.status === 409) {
-        //     errorMessage.style.visibility = "visible";
-        //     errorMessage.textContent = result.res;
+        if (result.status === 400 || result.status === 404) {
+            errorMessage.style.visibility = "visible";
+            errorMessage.textContent = result.res;
 
-        // } else if (result.status === 200) {
-        //     errorMessage.style.visibility = "none";
-        //     window.location.href = "/verify-email";
+        } else if (result.status === 200) {
+            errorMessage.style.visibility = "hidden";
 
-        // } else if (result.status === 401 || result.status === 404) {
-        //     errorMessage.style.visibility = "none";
-        //     window.location.href = "/onboarding";
+            resultElement.textContent = "Password successfully changed. ";
+            resultElement.append(document.createElement("br"));
 
-        // } else {
-        //     errorDisplay.textContent = "Something went wrong. Please try again";
-        //     errorDisplay.style.visibility = "visible";
-        // }
+            const loginLink = document.createElement("a");
+            loginLink.href = "/onboarding";
+            loginLink.textContent = "Go to login";
+
+            resultElement.append(loginLink);
+
+            changePassword.reset();
+            clearInterval(timer);
+        } else {
+            errorDisplay.textContent = "Something went wrong. Please try again";
+            errorDisplay.style.visibility = "visible";
+        }
 
     })
 })

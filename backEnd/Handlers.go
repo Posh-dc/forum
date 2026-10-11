@@ -651,12 +651,14 @@ func (db *DBstruct) ForgetPasswordHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	email := MaskEmail(newEmail)
+
 	userInfo, err := GetUserDetails(r.Context(), db.DB, "email", newEmail)
 
 	if err != nil {
 		fmt.Println(err)
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "If an account exists for this email, a password reset link has been sent.", http.StatusNotFound)
+			http.Error(w, email, http.StatusNotFound)
 			return
 		}
 		fmt.Println(err)
@@ -714,7 +716,7 @@ func (db *DBstruct) ForgetPasswordHandler(w http.ResponseWriter, r *http.Request
 
 	_, err = tx.Exec(ctx, `INSERT INTO email_outbox(recipient_email, subject, body) VALUES($1,$2,$3)`,
 		userInfo.Email,
-		"Rest your account password\r\n",
+		"Reset your account password\r\n",
 		CreateResetVericationToken(userInfo.UserName, "http://localhost:9090/change-password?token="+code),
 	)
 
@@ -732,7 +734,7 @@ func (db *DBstruct) ForgetPasswordHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	email := MaskEmail(userInfo.Email)
+	email = MaskEmail(userInfo.Email)
 	fmt.Fprint(w, email)
 
 }
@@ -741,8 +743,96 @@ func (db *DBstruct) ForgetPasswordHandler(w http.ResponseWriter, r *http.Request
 func (db *DBstruct) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 
 	password := r.FormValue("password")
+	token := r.URL.Query().Get("token")
 
-	fmt.Println(string(password))
+	ctx := r.Context()
+
+	tokenHash := GeneralHashFunction(token)
+
+	codeDetails, err := GetUserEmailVerificationDetails(ctx, db.DB, "code_hash", tokenHash)
+
+	fmt.Println(codeDetails)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "invalid or expired reset token", http.StatusNotFound)
+			return
+		}
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if time.Now().After(codeDetails.ExpiresAt) {
+		http.Error(w, "Token already expired", http.StatusBadRequest)
+		return
+	}
+
+	password, err = ValidatePassword(password)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	passwordHash, err := HashPassword(password)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	tx, err := db.DB.Begin(ctx)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `DELETE FROM email_verification_codes  WHERE id = $1`, codeDetails.ID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if tag.RowsAffected() != 1 {
+		http.Error(w, "Invalid or expired reset token", http.StatusBadRequest)
+		return
+	}
+
+	tag, err = tx.Exec(ctx, `UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2`, passwordHash, codeDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if tag.RowsAffected() != 1 {
+		http.Error(w, "Invalid or expired reset token", http.StatusBadRequest)
+		return
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM session  WHERE user_id = $1`, codeDetails.UserID)
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprint(w, "Password updated")
 }
 
 /*                            PAGES HANDLERS              */

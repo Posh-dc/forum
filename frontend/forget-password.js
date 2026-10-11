@@ -1,6 +1,8 @@
 
 
+let errorDisplay = document.getElementById("errorMessage");
 
+console.log(errorDisplay)
 
 let ResetPasword = document.getElementById("forgetPassword");
 
@@ -18,30 +20,21 @@ ResetPasword.addEventListener("submit", (e) => {
             res: data
         }));
     }).then((result) => {
-        if (result.status == 200) {
+        if (result.status == 200 || result.status == 404) {
             document.getElementById("email").textContent = result.res
             document.querySelectorAll(".close")[0].style.display = "none"
             document.querySelectorAll(".close")[1].style.display = "none"
             document.querySelector(".open").style.display = "block"
-
-
         }
-        // if (result.status === 400 || result.status === 409) {
-        //     errorMessage.style.visibility = "visible";
-        //     errorMessage.textContent = result.res;
+        if (result.status == 400) {
+            errorDisplay.style.visibility = "visible";
+            errorDisplay.textContent = result.res;
+            console.log(errorDisplay)
 
-        // } else if (result.status === 200) {
-        //     errorMessage.style.visibility = "none";
-        //     window.location.href = "/verify-email";
-
-        // } else if (result.status === 401 || result.status === 404) {
-        //     errorMessage.style.visibility = "none";
-        //     window.location.href = "/onboarding";
-
-        // } else {
-        //     errorDisplay.textContent = "Something went wrong. Please try again";
-        //     errorDisplay.style.visibility = "visible";
-        // }
+        } else {
+            errorDisplay.textContent = "Something went wrong. Please try again";
+            errorDisplay.style.visibility = "visible";
+        }
 
     })
 })
